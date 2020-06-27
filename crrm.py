@@ -19,21 +19,28 @@ if sys.version_info[0] < 3:
 # PLOT    plot function n: [1..PLOT] -> price: []
 #         set to 0 for simple depth-based calculation
 #         set to value > 0 for a plot with n in [1,value]
-# CP..    1 = Call; -1 = Put
+# PCS.    0 = Put, 1 = Call, 2 = Sprint
 # T...    expiration time in years
 # S...    stock price
 # E...    strike price
+# BAS.    used for sprint: yield above BAS is increased by factor mult up until CAP
+# CAP.    used for sprint: derivative does not yield additional returns when S > CAP
+# MUL.    multiplier for sprint: derivative yields MUL times more returns for range E < S < CAP
+#         sprint price is = {S <= E: S, E < S <= CAP: E + MUL * (S - E), CAP < S: E + 2 * (CAP - E)}
 # q...    dividend yield
 # n...    height of the binomial tree
 # r...    interest rate
 # sigma.. volatility
 # mu..    expected return of log norm
 
-PLOT = 1000
-CP = -1
+PLOT = 000
+PCS = 2
 T = 4/12            # 3 months remaining
 S = 119.1135
 E = 120.0000
+BAS = 126.0000
+CAP = 130.0000
+MUL = 2
 q = 0
 n = 1000
 r = -.04            # 3 months EURIBOR
@@ -42,23 +49,39 @@ mu = -0.0
 
 # calculate option value at expiration
 
-def intrinsic_option_value(s, e):
-    if CP > 0:
-        # call option
-
-        return max(s - e, 0)
-    else:
+def intrinsic_derivative_value(s):
+    if PCS == 0:
         # put option
 
-        return max(e - s, 0)
+        return max(E - s, 0)
+    
+    elif PCS == 1:
+        # call option
+
+        return max(s - E, 0)
+    elif PCS == 2:
+        # sprint certificate
+
+        if s <= BAS:
+            return s
+        elif s <= CAP:
+            return E + MUL * (s - BAS)
+        else:
+            return CAP * 2 - BAS
+    else:
+        # CP not defined
+
+        print("PCS={} is not defined. Use PCS = 1,2,3".format(PCS))
+        sys.exit()
 
 # used for recursive calculation in the binomial model
-def option_value(s1, s2, p, r, dt):
+def node_value(s1, s2, p, r, dt):
     pr = 1 - p
 
     # return discounted expected return
 
     return (p * s1 + pr * s2) * exp(-r * dt)
+    
 
 # calculate option prices for each state at expiration
 
@@ -106,12 +129,12 @@ def crrm(n):
     # [0][7]
 
     for i in range(0, n + 1):
-        prices[0].append(intrinsic_option_value(S * u ** (n - 2 * i), E))
+        prices[0].append(intrinsic_derivative_value(S * u ** (n - 2 * i)))
 
     for i in range(1, n):
         prices.append([])
         for j in range(0, n - i):
-            prices[i].append(option_value(prices[i - 1][j], prices[i - 1][j + 1], p, r, deltaT))
+            prices[i].append(node_value(prices[i - 1][j], prices[i - 1][j + 1], p, r, deltaT))
 
     if PLOT <= 0:
         print('Aktueller Preis nach CRRM mit n={}: {}'.format(n, prices[-1][0]))
@@ -124,7 +147,7 @@ def bs():
     d1 = log(S/E) + (r + sigma * sigma / 2) * T / sigma / sqrt(T)
     d2 = d1 - sigma * sqrt(T)
 
-    if CP > 0:
+    if PCS > 0:
         bs_price = S * norm.cdf(d1) - E * exp(-r * T) * norm.cdf(d2)
 
     else:
@@ -136,7 +159,8 @@ def bs():
 
 if PLOT <= 0:
     crrm(n)
-    bs()
+    if PCS == 0 or PCS == 1:
+        bs()
 
 else:
     price_per_depth = []
