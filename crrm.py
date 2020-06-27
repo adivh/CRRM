@@ -36,8 +36,8 @@ if sys.version_info[0] < 3:
 # mu..    expected return of log norm
 
 V = 0
-PLOT = 1000
-PCS = 0
+PLOT = 000
+PCS = 2
 T = 4/12            # 3 months remaining
 S = 119.1135
 E = 120.0000
@@ -62,26 +62,26 @@ if PCS < 0 or PCS > 2:
 def intrinsic_derivative_value(s):
     if PCS == 0:
         # put option
-
         return max(E - s, 0)
     
     elif PCS == 1:
         # call option
-
         return max(s - E, 0)
+
     elif PCS == 2:
         # sprint certificate
-
         if s <= BAS:
             return s
+
         elif s <= CAP:
             return E + MUL * (s - BAS)
+
         else:
             return CAP * 2 - BAS
     else:
         # PCS not defined
-
         print('this should never be reached..')
+        return nan
         
 
 # used for recursive calculation in the binomial model
@@ -119,6 +119,9 @@ def crrm(n):
 
     if p <= 0 or p >= 1:
         print('probability for up-state not in (0,1)..')
+        print('mu={}, sigma={}'.format(mu, sigma))
+        print('exiting..')
+        sys.exit()
 
     # print values for fun
 
@@ -171,7 +174,6 @@ def bs():
     d1 = log(S/E) + (r + sigma * sigma / 2) * T / sigma / sqrt(T)
     d2 = d1 - sigma * sqrt(T)
 
-
     if PCS == 1:
         # call option
         return S * norm.cdf(d1) - E * exp(-r * T) * norm.cdf(d2)
@@ -202,7 +204,6 @@ if PLOT <= 0:
 # if sprint -> calculate CRRM
 
 else:
-
     # collect price data for every depth from n to PLOT
 
     price_per_depth = []
