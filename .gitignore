@@ -1,0 +1,14 @@
+# folders #
+###########
+
+.vscode
+
+# pycache #
+###########
+
+__pycache__
+
+# file types #
+##############
+
+*.pyc
