@@ -35,9 +35,9 @@ if sys.version_info[0] < 3:
 # sigma.. volatility
 # mu..    expected return of log norm
 
-V = 0
+V = 1
 PLOT = 000
-PCS = 2
+PCS = 0
 T = 4/12            # 3 months remaining
 S = 119.1135
 E = 120.0000
@@ -45,7 +45,7 @@ BAS = 126.0000
 CAP = 130.0000
 MUL = 2
 q = 0               # not implemented
-n = 1000
+n = 100000
 r = -.04            # 3 months EURIBOR
 sigma = .3086
 mu = -0.0
@@ -86,12 +86,12 @@ def intrinsic_derivative_value(s):
 
 # used for recursive calculation in the binomial model
 
-def node_value(s1, s2, p, r, dt):
+def node_value(s1, s2, p, exprdt):
     pr = 1 - p
 
     # return discounted expected return
-
-    return (p * s1 + pr * s2) * exp(-r * dt)
+    
+    return (p * s1 + pr * s2) * exprdt
     
 # Calculate Cox-Ross-Rubinstein Binomial Model
 # Return current price based on model
@@ -114,6 +114,10 @@ def crrm(n):
 
     p = .5 + mu * sqrt(deltaT) / 2 / sigma
 
+    # precomputation of discount factor
+
+    exprdt = exp(-r * deltaT)
+
     # catch errors
     # this should only occure for wierd values in mu or sigma
 
@@ -130,42 +134,56 @@ def crrm(n):
 
     # initialize 2d list in imperative language style because I don't know any better
 
-    prices = [[]]
+    prices = [[nan] * (n + 1), [nan] * n]
 
-    # STRUCTURE:
-    # t=n       t=n-1   ..  t=1         t=0
-    # [0][0]    [1][0]      [n-1][0]    [n][0]
-    # [0][1]    [1][1]      [n-1][1]
-    # [0][3]    [1][2]
-    # [0][4]    [1][3]
-    # [0][5]    [1][4]
-    # [0][6]      ..
-    #   ..      [1][n-1]
-    # [0][n]
+    # Algorithm:
+    # prune the tree as soon as the leaves become obsolete
+    # this reduces memory complexit from O(n^2) to O(n)
+    #
+    # iteration 1                                      iteration 2                                       --->    iteration n                                   
+    # calculate parent         write back              calculate parent          write back              --->    calculate parent          write back          
+    #
+    # t=n          t=n-1       t=n         t=n-1       t=n-1         t=n-2       t=n-1       t=n-2       --->    t=n-1         t=n-2       t=n-1       t=n-2   
+    #                                                                                                    --->                             !!!!!!!!             
+    # [0][0] --+-> [1][0]      [0][0] <--- [1][0]      [0][0] --+--> [1][0]      [0][0] <--- [1][0]      --->    [0][0] --+--> [1][0]      RESULT <--- [1][0]  
+    #          |                                                |                                        --->             |               !!!!!!!!             
+    # [0][1] --/   [1][1]      [0][1]      [1][1]      [0][1] --/    [1][1]      [0][1]      [1][1]      --->    [0][1] --/    [1][1]      [0][1]      [1][1]  
+    # [0][3]       [1][2]      [0][3]      [1][2]      [0][3]        [1][2]      [0][3]      [1][2]      --->    [0][3]        [1][2]      [0][3]      [1][2]  
+    # [0][4]       [1][3]      [0][4]      [1][3]      [0][4]        [1][3]      [0][4]      [1][3]      --->    [0][4]        [1][3]      [0][4]      [1][3]  
+    #   ..           ..          ..          ..          ..            ..          ..          ..        --->      ..            ..          ..          ..    
+    # [0][n-2]     [1][n-2]    [0][n-2]    [1][n-2]    [0][n-2]  +-> [1][n-2]    [0][n-2] <- [1][n-2]    --->    [0][n-2]      [1][n-2]    [0][n-2]    [1][n-2]
+    #                                                            |                                       --->                                                  
+    # [0][n-1] +-> [1][n-1]    [0][n-1] <- [1][n-1]    [0][n-1] -/   [1][n-1]    [0][n-1]    [1][n-1]    --->    [0][n-1]      [1][n-1]    [0][n-1]    [1][n-1]
+    #          |                                                                                         --->                                                  
+    # [0][n] --/               [0][n]                  [0][n]                    [0][n]                  --->    [0][n]                    [0][n]              
 
     # calculate option prices for each state at expiration
     # save result in leaves
 
     for i in range(0, n + 1):
-        prices[0].append(intrinsic_derivative_value(S * u ** (n - 2 * i)))
+        prices[0][i] = intrinsic_derivative_value(S * u ** (n - 2 * i))
 
     # traverse tree from leaves to root
     # calculate node values based on the child node values
 
     for i in range(1, n):
 
-        # append list in prices to prevent index out of bounds
+        # output progress
 
-        prices.append([])
+        if V > 0 and i % 250 == 0:
+            print('{:5d}'.format(i))
 
         # calculate node value based on both child node values and save in current node
+        # then write back result in what used to represent the upper child node
 
         for j in range(0, n - i):
-            prices[i].append(node_value(prices[i - 1][j], prices[i - 1][j + 1], p, r, deltaT))
+            prices[1][j] = node_value(prices[0][j], prices[0][j + 1], p, exprdt)
+            prices[0][j] = prices[1][j]
 
     # the root is the current price
+    # the root is now stored in [0][0]
 
-    return prices[-1][0]
+    return prices[0][0]
 
 # Caluclate Black-Scholes Model
 # Return current price based on model
@@ -209,6 +227,10 @@ else:
     price_per_depth = []
 
     for i in range(1,PLOT + 1):
+
+        if i % 100 == 0:
+            print(i)
+
         price_per_depth.append(crrm(i))
 
     # x axis 1 to PLOT
