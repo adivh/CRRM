@@ -3,7 +3,9 @@
 ### caused by integer division.   Thank you!   ###
 ##################################################
 
+from scipy.stats import norm
 from math import exp
+from math import log
 from math import sqrt
 import sys
 
@@ -28,10 +30,10 @@ T = 4/12            # 3 months remaining
 S = 11911.35
 E = 12000.00
 q = 0
-n = 20000
+n = 100
 r = -.04            # 3 months EURIBOR
 sigma = .3086
-mu = 0
+mu = -0.0
 
 # calculate option value at expiration
 
@@ -103,4 +105,16 @@ for i in range(1, n):
     for j in range(0, n - i):
         prices[i].append(option_value(prices[i - 1][j], prices[i - 1][j + 1], p, r, deltaT))
 
-print('Aktueller Preis: {}'.format(prices[-1][0]))
+print('Aktueller Preis nach CRRM: {}'.format(prices[-1][0]))
+
+# Black-Scholes
+
+d1 = log(S/E) + (r + sigma * sigma / 2) * T / sigma / sqrt(T)
+d2 = d1 - sigma * sqrt(T)
+
+if CP > 0:
+    bs_price = S * norm.cdf(d1) - E * exp(-r * T) * norm.cdf(d2)
+else:
+    bs_price = E * exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+
+print('Aktueller Preis nach Black-Scholes: {}'.format(bs_price))
